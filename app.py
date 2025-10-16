@@ -14,6 +14,10 @@ class HelloRequest(BaseModel):
 def ping():
     return {"message": "pong"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "message": "Service is running"}
+
 @app.post("/hello")
 def say_hello(req: HelloRequest):
     return {"message": f"Hello, {req.name}. Your connector is working properly."}
