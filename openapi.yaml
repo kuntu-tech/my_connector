@@ -1,0 +1,44 @@
+openapi: 3.0.1
+info:
+  title: My Custom Connector
+  version: 1.0.0
+  description: 一个 FastAPI 示例，用于连接 ChatGPT Connector 功能。
+paths:
+  /ping:
+    get:
+      summary: 测试接口
+      responses:
+        "200":
+          description: 成功返回 pong
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: pong
+  /hello:
+    post:
+      summary: 打招呼接口
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: 王先生
+      responses:
+        "200":
+          description: 返回问候语
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 你好, 王先生！欢迎使用自定义连接器 🚀
