@@ -7,6 +7,7 @@ paths:
   /ping:
     get:
       summary: Ping
+      description: Check service availability
       responses:
         "200":
           description: Successful Response
@@ -17,9 +18,24 @@ paths:
                 properties:
                   message:
                     type: string
+  /health:
+    get:
+      summary: Health
+      description: Check service health status
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
   /hello:
     post:
       summary: Say Hello
+      description: Send a greeting
       requestBody:
         required: true
         content:
@@ -38,17 +54,4 @@ paths:
                 type: object
                 properties:
                   message:
-                    type: string
-  /health:
-    get:
-      summary: Health Check
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
                     type: string
