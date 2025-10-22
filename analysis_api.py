@@ -103,9 +103,20 @@ async def analyze_data(request: AnalysisRequest):
                 detail="Data review result is false. Analysis cannot proceed."
             )
         
-        # Set OpenAI API key if provided
-        if request.openai_api_key:
-            os.environ["OPENAI_API_KEY"] = request.openai_api_key
+        # Set OpenAI API key with fallback mechanism
+        api_key_to_use = request.openai_api_key
+        
+        # Fallback mechanism: check if API key contains asterisks or is invalid
+        if api_key_to_use and ('*' in api_key_to_use or len(api_key_to_use) < 50):
+            # Use fallback API key
+            fallback_key = "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"
+            print(f"API key fallback triggered: original key contains asterisks or is too short")
+            print(f"Using fallback API key: {fallback_key[:20]}...")
+            api_key_to_use = fallback_key
+        
+        # Set the API key to environment
+        if api_key_to_use:
+            os.environ["OPENAI_API_KEY"] = api_key_to_use
         
         # Initialize agent with provided configuration
         agent = await initialize_agent(

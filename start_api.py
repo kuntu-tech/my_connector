@@ -15,6 +15,15 @@ def main():
     required_vars = ["OPENAI_API_KEY"]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     
+    # 检查 API 密钥质量
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        if '*' in openai_key or len(openai_key) < 50:
+            print(f"警告: OPENAI_API_KEY 可能无效 (包含星号或长度不足)")
+            print("将使用降级方案")
+        else:
+            print(f"OPENAI_API_KEY 已设置: {openai_key[:20]}...")
+    
     if missing_vars:
         print(f"警告: 以下环境变量未设置: {', '.join(missing_vars)}")
         print("API 可能无法正常工作")
