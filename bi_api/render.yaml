@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: bi-analysis-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start_bi_api.py
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_PROJECT_ID
+        sync: false
+      - key: SUPABASE_ACCESS_TOKEN
+        sync: false
+      - key: USER_NAME
+        value: huimin
+      - key: DATA_REVIEW_RESULT
+        value: true
+      - key: ENVIRONMENT
+        value: production

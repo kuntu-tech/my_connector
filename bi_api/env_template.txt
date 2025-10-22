@@ -1,0 +1,22 @@
+# BI Analysis API Environment Variables Template
+# Copy this file to .env and fill in your actual values
+
+# OpenAI API Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Supabase Configuration
+SUPABASE_PROJECT_ID=your_supabase_project_id_here
+SUPABASE_ACCESS_TOKEN=your_supabase_access_token_here
+
+# User Configuration
+USER_NAME=huimin
+
+# Data Review Configuration
+DATA_REVIEW_RESULT=true
+
+# Environment Configuration
+ENVIRONMENT=development
+
+# Optional: Custom API Settings
+# PORT=8000
+# LOG_LEVEL=info
