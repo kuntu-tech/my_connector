@@ -116,7 +116,8 @@ async def analyze_data(request: AnalysisRequest):
         
         results = {}
         files_generated = []
-        headers = request.headers
+        # Note: headers are not available in Pydantic model, using default values
+        headers = {"Content-Type": "application/json"}
         database_saved = False
         
         # Execute analysis based on type
