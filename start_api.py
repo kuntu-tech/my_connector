@@ -25,11 +25,17 @@ def main():
     print("健康检查地址: http://localhost:8000/health")
     print("分析接口地址: http://localhost:8000/analyze")
     
+    # 获取端口，Render 会通过环境变量 PORT 指定端口
+    port = int(os.environ.get("PORT", 8000))
+    
+    # 检查是否为开发环境
+    is_development = os.environ.get("ENVIRONMENT", "production") == "development"
+    
     uvicorn.run(
-        "analysis_api:app",
+        "analysis_api:app",  # 使用 AI 分析 API
         host="0.0.0.0",
-        port=8000,
-        reload=True,
+        port=port,
+        reload=is_development,  # 只在开发环境启用热重载
         log_level="info"
     )
 
