@@ -123,22 +123,19 @@ async def analyze_data(request: AnalysisRequest):
         # Set OpenAI API key with fallback mechanism
         api_key_to_use = request.openai_api_key
         
-        # Check environment variable first
-        if env_api_key and ('*' in env_api_key or len(env_api_key) < 50):
-            print(f"Environment API key fallback triggered: contains asterisks or is too short")
-            print(f"Environment key: {env_api_key}")
-            # Use fallback API key for environment
+        # Priority: Use request API key first, then environment variable
+        if api_key_to_use and ('*' not in api_key_to_use and len(api_key_to_use) >= 50):
+            print(f"Using request API key: {api_key_to_use[:20]}...")
+            os.environ["OPENAI_API_KEY"] = api_key_to_use
+        elif env_api_key and ('*' not in env_api_key and len(env_api_key) >= 50):
+            print(f"Using environment API key: {env_api_key[:20]}...")
+            os.environ["OPENAI_API_KEY"] = env_api_key
+            api_key_to_use = env_api_key
+        else:
+            # Use fallback API key only if both are invalid
             fallback_key = "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"
-            print(f"Using fallback API key: {fallback_key[:20]}...")
+            print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
-            api_key_to_use = fallback_key
-        
-        # Fallback mechanism: check if request API key contains asterisks or is invalid
-        elif api_key_to_use and ('*' in api_key_to_use or len(api_key_to_use) < 50):
-            # Use fallback API key
-            fallback_key = "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"
-            print(f"Request API key fallback triggered: original key contains asterisks or is too short")
-            print(f"Using fallback API key: {fallback_key[:20]}...")
             api_key_to_use = fallback_key
         
         # Set the API key to environment
