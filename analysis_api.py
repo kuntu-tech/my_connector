@@ -103,11 +103,27 @@ async def analyze_data(request: AnalysisRequest):
                 detail="Data review result is false. Analysis cannot proceed."
             )
         
+        # Debug: Print environment variables
+        print("=" * 60)
+        print("DEBUG: API Key Analysis")
+        print("=" * 60)
+        
+        # Check environment variable first
+        env_api_key = os.getenv("OPENAI_API_KEY")
+        print(f"Environment OPENAI_API_KEY: {env_api_key}")
+        print(f"Environment key length: {len(env_api_key) if env_api_key else 0}")
+        print(f"Environment key contains asterisks: {'*' in env_api_key if env_api_key else False}")
+        
+        # Check request API key
+        request_api_key = request.openai_api_key
+        print(f"Request OPENAI_API_KEY: {request_api_key}")
+        print(f"Request key length: {len(request_api_key) if request_api_key else 0}")
+        print(f"Request key contains asterisks: {'*' in request_api_key if request_api_key else False}")
+        
         # Set OpenAI API key with fallback mechanism
         api_key_to_use = request.openai_api_key
         
         # Check environment variable first
-        env_api_key = os.getenv("OPENAI_API_KEY")
         if env_api_key and ('*' in env_api_key or len(env_api_key) < 50):
             print(f"Environment API key fallback triggered: contains asterisks or is too short")
             print(f"Environment key: {env_api_key}")
@@ -115,9 +131,10 @@ async def analyze_data(request: AnalysisRequest):
             fallback_key = "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"
             print(f"Using fallback API key: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
+            api_key_to_use = fallback_key
         
         # Fallback mechanism: check if request API key contains asterisks or is invalid
-        if api_key_to_use and ('*' in api_key_to_use or len(api_key_to_use) < 50):
+        elif api_key_to_use and ('*' in api_key_to_use or len(api_key_to_use) < 50):
             # Use fallback API key
             fallback_key = "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"
             print(f"Request API key fallback triggered: original key contains asterisks or is too short")
@@ -127,6 +144,13 @@ async def analyze_data(request: AnalysisRequest):
         # Set the API key to environment
         if api_key_to_use:
             os.environ["OPENAI_API_KEY"] = api_key_to_use
+        
+        # Final debug output
+        final_api_key = os.getenv("OPENAI_API_KEY")
+        print(f"Final API key to use: {final_api_key}")
+        print(f"Final key length: {len(final_api_key) if final_api_key else 0}")
+        print(f"Final key contains asterisks: {'*' in final_api_key if final_api_key else False}")
+        print("=" * 60)
         
         # Initialize agent with provided configuration
         agent = await initialize_agent(
