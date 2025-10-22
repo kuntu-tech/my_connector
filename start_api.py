@@ -17,6 +17,19 @@ def main():
     
     # 检查 API 密钥质量
     openai_key = os.getenv("OPENAI_API_KEY")
+    print("=" * 60)
+    print("RENDER 环境变量检查")
+    print("=" * 60)
+    print(f"OPENAI_API_KEY: {openai_key}")
+    print(f"密钥长度: {len(openai_key) if openai_key else 0}")
+    print(f"包含星号: {'*' in openai_key if openai_key else False}")
+    print(f"SUPABASE_PROJECT_URL: {os.getenv('SUPABASE_PROJECT_URL')}")
+    print(f"SUPABASE_ACCESS_TOKEN: {os.getenv('SUPABASE_ACCESS_TOKEN')}")
+    print(f"USER_NAME: {os.getenv('USER_NAME')}")
+    print(f"DATA_REVIEW_RESULT: {os.getenv('DATA_REVIEW_RESULT')}")
+    print(f"ENVIRONMENT: {os.getenv('ENVIRONMENT')}")
+    print("=" * 60)
+    
     if openai_key:
         if '*' in openai_key or len(openai_key) < 50:
             print(f"警告: OPENAI_API_KEY 可能无效 (包含星号或长度不足)")
