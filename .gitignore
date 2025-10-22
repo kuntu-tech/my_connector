@@ -52,3 +52,7 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Output directories
+demo2/outputs/
+outputs/
