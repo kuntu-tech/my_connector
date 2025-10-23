@@ -42,27 +42,32 @@ def audit_table_with_gpt(table_info):
     client = OpenAI(api_key=OPENAI_API_KEY)
     # print(client)
     prompt = f"""
-你是一名数据合规性审查专家。请根据 OpenAI 数据政策，对以下 Supabase 的表进行分析：
-以下表信息：{table_info}进行数据审查
-要求：
-1. 指出可能的个人联系方式或宗教、政治、未成年人等敏感信息字段；
-2. 说明是否违反数据合规规范；
-3.按照JSON格式进行输出
-4.输出字段只包含table_name,contains_personal_data,contains_sensitive_data,contains_sensitive_fields,allowed_to_use
-5.如果contains_sensitive_data is True，则将具体的字段输出到contains_sensitive_fields中，如果contains_sensitive_data is False，contains_sensitive_fields为None
-6.输出语言为英语
+You are a data compliance expert. Please analyze the following Supabase table according to OpenAI data policies:
+Table information: {table_info}
+Requirements:
+1. Identify possible personal contact information or sensitive fields related to religion, politics, minors, etc.;
+2. Explain whether it violates data compliance regulations;
+3. Output in JSON format only
+4. Output fields should only contain: table_name, contains_personal_data, contains_sensitive_data, contains_sensitive_fields, allowed_to_use
+5. If contains_sensitive_data is True, output specific fields to contains_sensitive_fields; if contains_sensitive_data is False, contains_sensitive_fields should be null
+6. Output language: English
+7. Return ONLY valid JSON, no additional text or explanations
 """
 
-    print(f"正在进行表：{table_info.get('table_name')}的数据审查 ...")
+    # print(f"正在进行表：{table_info.get('table_name')}的数据审查 ...")
     # print(table_info)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        # temperature=0
+        messages=[
+            {"role": "system", "content": "You are a data compliance expert. Always respond with valid JSON only."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0
     )
     # print(response)
     report = response.choices[0].message.content
-    # print(f"\n📋 审查结果：\n", report)
+    print(f"\n审查结果：\n", report)
     return report
 #数据审查主流程
 def data_check(tables_info):
@@ -81,7 +86,6 @@ def data_check(tables_info):
             report_json = {"table_name": table.get("table_name", "unknown"), "allowed_to_use": False, "error": str(e)}
             reports_list.append(report_json)
             all_allowed = False
-    
     # 统一总结报告
     summary = {
         "tables_audited": reports_list,
@@ -89,6 +93,25 @@ def data_check(tables_info):
     }
     print("总结报告：")
     print(json.dumps(summary, indent=4, ensure_ascii=False))
+    
+    # 保存审查结果到文件
+    output_dir = Path(__file__).resolve().parent / "outputs-1"
+    output_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    # 创建包含all_allowed和summary的完整审查结果
+    complete_audit_result = {
+        "all_allowed": all_allowed,
+        "summary": summary,
+        "audit_timestamp": timestamp
+    }
+    
+    audit_path = output_dir / f"data_audit_{timestamp}.json"
+    audit_path.write_text(json.dumps(complete_audit_result, indent=4, ensure_ascii=False), encoding="utf-8")
+    print(f"数据审查结果已保存到: {audit_path}")
+    print(f"all_allowed: {all_allowed}")
+    print(f"summary: {json.dumps(summary, indent=2, ensure_ascii=False)}")
+    
     # 返回 True / False 信号
     return all_allowed, summary
 
@@ -129,6 +152,18 @@ async def main():
     schema_analysis = await Runner.run(
         agent,
         input="""use supabase mcp tools, give me a description in Supabase public schema.
+        Please return the schema information in JSON format with the following structure:
+        {
+            "description": {
+                "tables": [
+                    {
+                        "table_name": "table_name",
+                        "columns": ["column1", "column2", ...],
+                        "sample_data": [{"column1": "value1", "column2": "value2", ...}]
+                    }
+                ]
+            }
+        }
         """,
         session=session
     )
@@ -197,9 +232,35 @@ async def main():
                 report = checkquestion_with_gpt(question, schema_analysis_output)
                 reports_list.append(report)
         print(reports_list)
+        
+        # 保存数据建模验证结果到文件
+        output_dir = Path(__file__).resolve().parent / "outputs-1"
+        output_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        validation_path = output_dir / f"data_modeling_validation_{timestamp}.json"
+        validation_path.write_text(json.dumps(reports_list, indent=4, ensure_ascii=False), encoding="utf-8")
+        print(f"数据建模验证结果已保存到: {validation_path}")
     else:
-        output_info = summary
+        output_info = check_result.get("check_report")
         print(output_info)
+        
+        # 保存审查失败的结果到文件
+        output_dir = Path(__file__).resolve().parent / "outputs-1"
+        output_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        # 创建包含all_allowed和summary的完整审查失败结果
+        complete_audit_failed_result = {
+            "all_allowed": all_allowed,
+            "summary": summary,
+            "audit_timestamp": timestamp
+        }
+        
+        audit_failed_path = output_dir / f"data_audit_failed_{timestamp}.json"
+        audit_failed_path.write_text(json.dumps(complete_audit_failed_result, indent=4, ensure_ascii=False), encoding="utf-8")
+        print(f"数据审查失败结果已保存到: {audit_failed_path}")
+        print(f"all_allowed: {all_allowed}")
+        print(f"summary: {json.dumps(summary, indent=2, ensure_ascii=False)}")
 	
 if __name__ == "__main__":
     asyncio.run(main())
