@@ -522,7 +522,7 @@ async def run_integrated_analysis(request: IntegratedAnalysisRequest) -> Dict[st
             api_key_to_use = os.getenv("OPENAI_API_KEY")
         else:
             # Use fallback API key only if both are invalid
-            fallback_key = "os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")"
+            fallback_key = os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")
             print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
             api_key_to_use = fallback_key
@@ -894,7 +894,7 @@ async def analyze_data(request: BIAnalysisRequest):
             api_key_to_use = os.getenv("OPENAI_API_KEY")
         else:
             # Use fallback API key only if both are invalid
-            fallback_key = "os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")"
+            fallback_key = os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")
             print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
             api_key_to_use = fallback_key
@@ -1049,7 +1049,7 @@ async def review_data_compliance(request: DataReviewRequest):
                 api_key_to_use = env_key
             else:
                 # Use fallback key
-                api_key_to_use = "os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")"
+                api_key_to_use = os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")
         
         os.environ["OPENAI_API_KEY"] = api_key_to_use
         
