@@ -80,6 +80,39 @@ class BIAnalysisResponse(BaseModel):
     execution_time: float
     timestamp: str
 
+class DataReviewRequest(BaseModel):
+    """数据合规检查请求模型"""
+    supabase_project_id: str = Field(
+        ..., 
+        description="Supabase 项目 ID"
+    )
+    supabase_access_token: str = Field(
+        ..., 
+        description="Supabase 访问令牌"
+    )
+    user_name: str = Field(
+        default="huimin", 
+        description="用户标识"
+    )
+    openai_api_key: Optional[str] = Field(
+        default=None,
+        description="OpenAI API 密钥 (可选，可使用环境变量)"
+    )
+    tables_info: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="表信息列表 (可选，如果不提供会自动获取)"
+    )
+
+class DataReviewResponse(BaseModel):
+    """数据合规检查响应模型"""
+    success: bool
+    message: str
+    review_result: Dict[str, Any] = {}
+    tables_audited: List[Dict[str, Any]] = []
+    final_conclusion: bool
+    execution_time: float
+    timestamp: str
+
 # Tool function
 @function_tool
 def get_current_time() -> str:
@@ -93,23 +126,30 @@ def audit_table_with_gpt(table_info, openai_api_key: str = None):
     client = OpenAI(api_key=api_key)
     
     prompt = f"""
-你是一名数据合规性审查专家。请根据 OpenAI 数据政策，对以下 Supabase 的表进行分析：
-以下表信息：{table_info}进行数据审查
-要求：
-1. 指出可能的个人联系方式或宗教、政治、未成年人等敏感信息字段；
-2. 说明是否违反数据合规规范；
-3.按照JSON格式进行输出
-4.输出字段只包含table_name,contains_personal_data,contains_sensitive_data,contains_sensitive_fields,allowed_to_use
-5.如果contains_sensitive_data is True，则将具体的字段输出到contains_sensitive_fields中，如果contains_sensitive_data is False，contains_sensitive_fields为None
-6.输出语言为英语
+You are a data compliance expert. Please analyze the following Supabase table according to OpenAI data policies:
+Table information: {table_info}
+Requirements:
+1. Identify possible personal contact information or sensitive fields related to religion, politics, minors, etc.;
+2. Explain whether it violates data compliance regulations;
+3. Output in JSON format only
+4. Output fields should only contain: table_name, contains_personal_data, contains_sensitive_data, contains_sensitive_fields, allowed_to_use
+5. If contains_sensitive_data is True, output specific fields to contains_sensitive_fields; if contains_sensitive_data is False, contains_sensitive_fields should be null
+6. Output language: English
+7. Return ONLY valid JSON, no additional text or explanations
 """
 
     print(f"正在进行表：{table_info.get('table_name')}的数据审查 ...")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": "You are a data compliance expert. Always respond with valid JSON only."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0
     )
     report = response.choices[0].message.content
+    print(f"\n审查结果：\n", report)
     return report
 
 def data_check(tables_info, openai_api_key: str = None):
@@ -186,6 +226,21 @@ async def run_schema_analysis(agent: Agent, user_name: str) -> Dict[str, Any]:
     schema_analysis = await Runner.run(
         agent,
         input="""use supabase mcp tools, give me a description in Supabase public schema.
+        Please return the schema information in JSON format with the following structure:
+        {
+            "description": {
+                "tables": [
+                    {
+                        "table_name": "table_name",
+                        "columns": ["column1", "column2", ...],
+                        "sample_data": [{"column1": "value1", "column2": "value2", ...}]
+                    }
+                ]
+            }
+        }
+        
+        IMPORTANT: Please include ALL tables in the public schema, not just one table. 
+        Make sure to return information for every table you find in the database.
         """,
         session=session
     )
@@ -529,6 +584,80 @@ async def get_result(filename: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+# Data compliance review endpoint
+@app.post("/review", response_model=DataReviewResponse)
+async def review_data_compliance(request: DataReviewRequest):
+    """
+    数据合规性检查接口
+    专门用于检查数据是否符合合规要求，不执行其他分析
+    """
+    start_time = time.time()
+    
+    try:
+        # 设置 OpenAI API 密钥
+        api_key_to_use = request.openai_api_key or os.getenv("OPENAI_API_KEY")
+        
+        # 如果请求中的密钥无效，使用环境变量或备用密钥
+        if not api_key_to_use or ('*' in api_key_to_use and len(api_key_to_use) < 50):
+            env_key = os.getenv("OPENAI_API_KEY")
+            if env_key and ('*' not in env_key and len(env_key) >= 50):
+                api_key_to_use = env_key
+            else:
+                # 使用备用密钥
+                api_key_to_use = "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"
+        
+        os.environ["OPENAI_API_KEY"] = api_key_to_use
+        
+        # 获取表信息
+        if request.tables_info:
+            # 如果提供了表信息，直接使用
+            tables_info = request.tables_info
+            print(f"使用提供的表信息，共 {len(tables_info)} 个表")
+        else:
+            # 如果没有提供表信息，先获取schema
+            print("未提供表信息，正在获取数据库结构...")
+            agent = await initialize_agent(
+                supabase_project_id=request.supabase_project_id,
+                supabase_access_token=request.supabase_access_token,
+                user_name=request.user_name
+            )
+            
+            schema_result = await run_schema_analysis(agent, request.user_name)
+            tables_info = schema_result["json_data"].get("description", {}).get("tables", [])
+            
+            if not tables_info:
+                raise HTTPException(
+                    status_code=400,
+                    detail="无法获取数据库表信息，请检查 Supabase 连接配置"
+                )
+            print(f"成功获取数据库结构，共 {len(tables_info)} 个表")
+        
+        print(f"开始审查 {len(tables_info)} 个表的数据合规性...")
+        
+        # 执行数据合规检查
+        all_allowed, summary = data_check(tables_info, api_key_to_use)
+        
+        execution_time = time.time() - start_time
+        
+        return DataReviewResponse(
+            success=True,
+            message=f"数据合规性检查完成，共审查 {len(tables_info)} 个表",
+            review_result=summary,
+            tables_audited=summary.get("tables_audited", []),
+            final_conclusion=all_allowed,
+            execution_time=execution_time,
+            timestamp=datetime.now().isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        execution_time = time.time() - start_time
+        raise HTTPException(
+            status_code=500,
+            detail=f"数据合规性检查失败: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn

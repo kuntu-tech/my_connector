@@ -46,6 +46,7 @@ def main():
     print("API 文档地址: http://localhost:8000/docs")
     print("健康检查地址: http://localhost:8000/health")
     print("分析接口地址: http://localhost:8000/analyze")
+    print("数据审查接口地址: http://localhost:8000/review")
     
     # 获取端口，Render 会通过环境变量 PORT 指定端口
     port = int(os.environ.get("PORT", 8000))

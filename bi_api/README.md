@@ -81,6 +81,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ### 分析端点
 
 - `POST /analyze` - 执行BI分析（主要端点）
+- `POST /review` - 数据合规性检查（独立端点）
 
 ## 🔧 API 使用示例
 
@@ -112,7 +113,37 @@ curl -X POST "http://localhost:8000/analyze" \
      }'
 ```
 
-### 3. 完整分析流程
+### 3. 数据合规性检查
+
+```bash
+# 自动获取表信息进行审查
+curl -X POST "http://localhost:8000/review" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "supabase_project_id": "your_project_id",
+       "supabase_access_token": "your_access_token",
+       "user_name": "test_user",
+       "openai_api_key": "your_openai_key"
+     }'
+
+# 提供具体表信息进行审查
+curl -X POST "http://localhost:8000/review" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "supabase_project_id": "your_project_id",
+       "supabase_access_token": "your_access_token",
+       "user_name": "test_user",
+       "tables_info": [
+         {
+           "table_name": "users",
+           "columns": ["id", "name", "email", "phone"],
+           "sample_data": []
+         }
+       ]
+     }'
+```
+
+### 4. 完整分析流程
 
 ```bash
 curl -X POST "http://localhost:8000/analyze" \
@@ -129,7 +160,17 @@ curl -X POST "http://localhost:8000/analyze" \
 
 ## 📊 请求参数
 
-### BIAnalysisRequest 模型
+### DataReviewRequest 模型（数据合规检查）
+
+| 参数 | 类型 | 必需 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| supabase_project_id | string | 是 | - | Supabase 项目 ID |
+| supabase_access_token | string | 是 | - | Supabase 访问令牌 |
+| user_name | string | 否 | "huimin" | 用户标识 |
+| openai_api_key | string | 否 | null | OpenAI API 密钥 |
+| tables_info | array | 否 | null | 表信息列表（可选，不提供则自动获取） |
+
+### BIAnalysisRequest 模型（综合分析）
 
 | 参数 | 类型 | 必需 | 默认值 | 说明 |
 |------|------|------|--------|------|
@@ -142,7 +183,39 @@ curl -X POST "http://localhost:8000/analyze" \
 
 ## 📤 响应格式
 
-### BIAnalysisResponse 模型
+### DataReviewResponse 模型（数据合规检查）
+
+```json
+{
+  "success": true,
+  "message": "数据合规性检查完成，共审查 3 个表",
+  "review_result": {
+    "tables_audited": [
+      {
+        "table_name": "users",
+        "contains_personal_data": true,
+        "contains_sensitive_data": true,
+        "contains_sensitive_fields": ["email", "phone"],
+        "allowed_to_use": false
+      },
+      {
+        "table_name": "orders",
+        "contains_personal_data": false,
+        "contains_sensitive_data": false,
+        "contains_sensitive_fields": null,
+        "allowed_to_use": true
+      }
+    ],
+    "final_conclusion": false
+  },
+  "tables_audited": [...],
+  "final_conclusion": false,
+  "execution_time": 15.2,
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### BIAnalysisResponse 模型（综合分析）
 
 ```json
 {
@@ -172,17 +245,33 @@ curl -X POST "http://localhost:8000/analyze" \
 
 ## 🧪 测试
 
-运行测试脚本：
+### 基础功能测试
+
+运行基础测试脚本：
 
 ```bash
 python test_bi_api.py
 ```
 
-测试脚本会验证：
+基础测试脚本会验证：
 - 健康检查端点
 - 配置端点
 - Schema分析功能
 - 结果管理端点
+
+### 数据合规检查测试
+
+运行数据合规检查测试脚本：
+
+```bash
+python test_review_api.py
+```
+
+数据合规检查测试脚本会验证：
+- 健康检查端点
+- 提供表信息的数据合规检查
+- 自动获取表信息的数据合规检查
+- 错误处理和超时处理
 
 ## 🚀 部署到 Render
 
