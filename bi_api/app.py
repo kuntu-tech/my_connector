@@ -253,7 +253,7 @@ async def run_schema_analysis(agent: Agent, user_name: str) -> Dict[str, Any]:
     except json.JSONDecodeError as e:
         print(f"JSON decode error: {e}")
         print("Schema analysis returned text format, extracting table info...")
-        # 从文本中提取表信息，而不是使用模拟数据
+        # Extract table information from text instead of using mock data
         schema_analysis_json = {
             "description": {
                 "tables": [
@@ -389,17 +389,17 @@ async def run_question_validation(audience_analysis_output: str, schema_analysis
 async def save_to_database(analysis_type: str, content: str):
     """Save analysis result to database"""
     try:
-        print(f"正在将 {analysis_type} 分析结果保存到数据库...")
+        print(f"Saving {analysis_type} analysis results to database...")
         
-        # 实际的数据保存逻辑应该在这里实现
-        # 例如使用 Supabase 的 insert 操作
-        print(f"数据已保存到 'ai分析' 表的 'results' 字段")
+        # Actual data saving logic should be implemented here
+        # For example, using Supabase insert operation
+        print(f"Data saved to 'ai_analysis' table 'results' field")
         
-        # 发送提示给需要此数据的模块
-        print(f"已发送提示给需要 {analysis_type} 数据的模块")
+        # Send notification to modules that need this data
+        print(f"Notification sent to modules that need {analysis_type} data")
         
     except Exception as e:
-        print(f"保存数据时出错: {e}")
+        print(f"Error saving data: {e}")
 
 # Health check endpoint
 @app.get("/health")
@@ -643,7 +643,7 @@ async def review_data_compliance(request: DataReviewRequest):
         return DataReviewResponse(
             success=True,
             message=f"Data compliance check completed, {len(tables_info)} tables reviewed",
-            review_result=summary,
+            review_result={},
             tables_audited=summary.get("tables_audited", []),
             final_conclusion=all_allowed,
             execution_time=execution_time,
