@@ -1,0 +1,6 @@
+{
+    "supabase_project_id": "your_supabase_project_id",
+    "supabase_access_token": "your_supabase_access_token",
+    "user_name": "your_username",
+    "openai_api_key": "your_openai_api_key"
+}
