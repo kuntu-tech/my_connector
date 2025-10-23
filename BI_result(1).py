@@ -164,6 +164,9 @@ async def main():
                 ]
             }
         }
+        
+        IMPORTANT: Please include ALL tables in the public schema, not just one table. 
+        Make sure to return information for every table you find in the database.
         """,
         session=session
     )
