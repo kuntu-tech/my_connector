@@ -26,7 +26,7 @@ def test_fallback_mechanism():
         "supabase_access_token": "sbp_82dc8d631fde6e235ec5b7d4792b8d6fb66ad5cf",
         "user_name": "huimin",
         "data_review_result": True,
-        "openai_api_key": "sk-proj-********************************************************************************************************************************************************Oi0A"  # 包含星号的密钥
+        "openai_api_key": "your_openai_api_key_here"  # 请替换为真实的API密钥
     }
     
     print("1. 测试包含星号的 API 密钥 (应该触发降级)...")
@@ -84,7 +84,7 @@ def test_normal_key():
         "supabase_access_token": "sbp_82dc8d631fde6e235ec5b7d4792b8d6fb66ad5cf",
         "user_name": "huimin",
         "data_review_result": True,
-        "openai_api_key": "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"
+        "openai_api_key": "your_openai_api_key_here"  # 请替换为真实的API密钥
     }
     
     print(f"   正常密钥: {test_data_normal['openai_api_key'][:20]}...")

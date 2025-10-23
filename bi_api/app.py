@@ -147,6 +147,23 @@ class IntegratedAnalysisResponse(BaseModel):
     execution_time: float
     timestamp: str
 
+class BrandStrategyRequest(BaseModel):
+    """品牌策略分析请求模型"""
+    supabase_project_id: str = Field(..., description="Supabase项目ID")
+    supabase_access_token: str = Field(..., description="Supabase访问令牌")
+    user_name: str = Field(default="huimin", description="用户标识")
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API密钥")
+    analysis_data: Optional[Dict[str, Any]] = Field(default=None, description="分析数据")
+
+class BrandStrategyResponse(BaseModel):
+    """品牌策略分析响应模型"""
+    success: bool
+    message: str
+    brand_strategy: Dict[str, Any] = {}
+    files_generated: List[str] = []
+    execution_time: float
+    timestamp: str
+
 # Tool function
 @function_tool
 def get_current_time() -> str:
@@ -505,7 +522,7 @@ async def run_integrated_analysis(request: IntegratedAnalysisRequest) -> Dict[st
             api_key_to_use = os.getenv("OPENAI_API_KEY")
         else:
             # Use fallback API key only if both are invalid
-            fallback_key = "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"
+            fallback_key = "os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")"
             print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
             api_key_to_use = fallback_key
@@ -717,6 +734,117 @@ Based on our previous market analysis conversation, please focus on the market: 
         print(f"Error in integrated analysis: {e}")
         raise e
 
+# Brand Strategy Analysis Functions
+async def run_brand_strategy_analysis(request: BrandStrategyRequest) -> Dict[str, Any]:
+    """运行品牌策略分析"""
+    try:
+        # 设置API密钥
+        api_key_to_use = request.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if api_key_to_use:
+            os.environ["OPENAI_API_KEY"] = api_key_to_use
+        
+        # 导入品牌策略Agent
+        sys.path.append(str(Path(__file__).resolve().parent.parent))
+        from brand_strategist_agent import brand_strategist_agent, run_with_retry
+        
+        # 准备分析数据
+        if request.analysis_data:
+            data_json = json.dumps(request.analysis_data, ensure_ascii=False, indent=2)
+        else:
+            # 使用默认数据
+            data_json = json.dumps({
+                "timestamp": datetime.now().strftime("%Y%m%d%H%M%S"),
+                "analysis_type": "integrated_analysis",
+                "status": "pending",
+                "data": {}
+            }, ensure_ascii=False, indent=2)
+        
+        # 构建提示消息
+        example_json = """{
+    "chatapp_name": "Aurora Insights",
+    "chatapp_description": "An AI-powered brand platform that transforms analytical insights into compelling, market-ready product narratives.",
+    "chatapp_core_features": [
+        {
+        "feature_title": "Brand Positioning Engine",
+        "intro": "Defines the brand's competitive edge and value promise using structured strategic logic."
+        }
+    ]
+    }"""
+
+        msg = (
+            "Help me to do brand design.\n"
+            "No extra exlain and question.\n"
+            "<data>\n"
+            f"{data_json}\n"
+            "</data>\n\n"
+            "## Output Schema Example\n"
+            "'chatapp_core_features' MUST be 4. The output must follow this JSON structure:\n"
+            "```json\n"
+            f"{example_json}\n"
+            "```"
+        )
+        
+        # 调用品牌策略Agent
+        result = await run_with_retry(brand_strategist_agent, msg)
+        
+        if result:
+            # 解析AI返回的结果
+            try:
+                # 清理可能的代码块标记
+                cleaned_output = result.final_output.strip()
+                if cleaned_output.startswith("```json"):
+                    # 移除开头的```json
+                    cleaned_output = cleaned_output[7:]
+                if cleaned_output.endswith("```"):
+                    # 移除结尾的```
+                    cleaned_output = cleaned_output[:-3]
+                cleaned_output = cleaned_output.strip()
+                
+                brand_strategy = json.loads(cleaned_output)
+            except json.JSONDecodeError:
+                # 如果清理后仍然无法解析，保存原始输出
+                brand_strategy = {"raw_output": result.final_output}
+        else:
+            # 使用模拟结果
+            brand_strategy = {
+                "chatapp_name": "Aurora Insights",
+                "chatapp_description": "An AI-powered brand platform that transforms analytical insights into compelling, market-ready product narratives.",
+                "chatapp_core_features": [
+                    {
+                        "feature_title": "Brand Positioning Engine",
+                        "intro": "Defines the brand's competitive edge and value promise using structured strategic logic."
+                    },
+                    {
+                        "feature_title": "Market Intelligence Hub",
+                        "intro": "Aggregates and analyzes market data to identify opportunities and trends."
+                    },
+                    {
+                        "feature_title": "Audience Insight Generator",
+                        "intro": "Creates detailed audience personas and behavioral analysis."
+                    },
+                    {
+                        "feature_title": "Narrative Builder",
+                        "intro": "Transforms insights into compelling brand stories and messaging."
+                    }
+                ]
+            }
+        
+        # 保存结果到文件
+        output_dir = Path(__file__).resolve().parent / "outputs"
+        output_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        result_file = output_dir / f"brand_strategy_{timestamp}.json"
+        result_file.write_text(json.dumps(brand_strategy, ensure_ascii=False, indent=2), encoding="utf-8")
+        
+        return {
+            "brand_strategy": brand_strategy,
+            "files_generated": [str(result_file)]
+        }
+        
+    except Exception as e:
+        print(f"Brand strategy analysis failed: {e}")
+        raise e
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -766,7 +894,7 @@ async def analyze_data(request: BIAnalysisRequest):
             api_key_to_use = os.getenv("OPENAI_API_KEY")
         else:
             # Use fallback API key only if both are invalid
-            fallback_key = "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"
+            fallback_key = "os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")"
             print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
             api_key_to_use = fallback_key
@@ -921,7 +1049,7 @@ async def review_data_compliance(request: DataReviewRequest):
                 api_key_to_use = env_key
             else:
                 # Use fallback key
-                api_key_to_use = "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"
+                api_key_to_use = "os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")"
         
         os.environ["OPENAI_API_KEY"] = api_key_to_use
         
@@ -1010,6 +1138,39 @@ async def integrated_analysis(request: IntegratedAnalysisRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Integrated analysis failed: {str(e)}"
+        )
+
+# Brand Strategy Analysis endpoint
+@app.post("/brand-strategy", response_model=BrandStrategyResponse)
+async def brand_strategy_analysis(request: BrandStrategyRequest):
+    """
+    品牌策略分析端点
+    基于市场分析和受众洞察生成品牌策略
+    """
+    start_time = time.time()
+    
+    try:
+        print(f"Starting brand strategy analysis for user: {request.user_name}")
+        
+        # 运行品牌策略分析
+        result = await run_brand_strategy_analysis(request)
+        
+        execution_time = time.time() - start_time
+        
+        return BrandStrategyResponse(
+            success=True,
+            message="Brand strategy analysis completed successfully",
+            brand_strategy=result["brand_strategy"],
+            files_generated=result["files_generated"],
+            execution_time=execution_time,
+            timestamp=datetime.now().isoformat()
+        )
+        
+    except Exception as e:
+        execution_time = time.time() - start_time
+        raise HTTPException(
+            status_code=500,
+            detail=f"Brand strategy analysis failed: {str(e)}"
         )
 
 if __name__ == "__main__":

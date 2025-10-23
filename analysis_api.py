@@ -133,7 +133,7 @@ async def analyze_data(request: AnalysisRequest):
             api_key_to_use = env_api_key
         else:
             # Use fallback API key only if both are invalid
-            fallback_key = "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"
+            fallback_key = os.getenv("FALLBACK_OPENAI_API_KEY", "invalid_key")
             print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
             os.environ["OPENAI_API_KEY"] = fallback_key
             api_key_to_use = fallback_key
