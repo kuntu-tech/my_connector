@@ -69,6 +69,11 @@ async def main():
     if 'user_name' in config:
         os.environ['USER_NAME'] = config['user_name']
     
+    # 检查必要的API密钥
+    if not os.environ.get('OPENAI_API_KEY'):
+        print("错误: 未找到OPENAI_API_KEY，请设置环境变量或提供配置")
+        sys.exit(1)
+    
     print(f"配置参数: {config}")
     
     # 生成当前时间戳
