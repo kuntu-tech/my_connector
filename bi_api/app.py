@@ -32,10 +32,10 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源，生产环境建议指定具体域名
+    allow_origins=["*"],  # Allow all origins, production environment should specify specific domains
     allow_credentials=True,
-    allow_methods=["*"],  # 允许所有HTTP方法
-    allow_headers=["*"],  # 允许所有请求头
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all request headers
 )
 
 # Load environment variables
@@ -81,30 +81,30 @@ class BIAnalysisResponse(BaseModel):
     timestamp: str
 
 class DataReviewRequest(BaseModel):
-    """数据合规检查请求模型"""
+    """Data compliance check request model"""
     supabase_project_id: str = Field(
         ..., 
-        description="Supabase 项目 ID"
+        description="Supabase project ID"
     )
     supabase_access_token: str = Field(
         ..., 
-        description="Supabase 访问令牌"
+        description="Supabase access token"
     )
     user_name: str = Field(
         default="huimin", 
-        description="用户标识"
+        description="User identifier"
     )
     openai_api_key: Optional[str] = Field(
         default=None,
-        description="OpenAI API 密钥 (可选，可使用环境变量)"
+        description="OpenAI API key (optional, can use environment variable)"
     )
     tables_info: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        description="表信息列表 (可选，如果不提供会自动获取)"
+        description="Table information list (optional, will be retrieved automatically if not provided)"
     )
 
 class DataReviewResponse(BaseModel):
-    """数据合规检查响应模型"""
+    """Data compliance check response model"""
     success: bool
     message: str
     review_result: Dict[str, Any] = {}
@@ -138,7 +138,7 @@ Requirements:
 7. Return ONLY valid JSON, no additional text or explanations
 """
 
-    print(f"正在进行表：{table_info.get('table_name')}的数据审查 ...")
+    print(f"Auditing table: {table_info.get('table_name')} for data compliance...")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -149,35 +149,35 @@ Requirements:
         temperature=0
     )
     report = response.choices[0].message.content
-    print(f"\n审查结果：\n", report)
+    print(f"\nAudit result:\n", report)
     return report
 
 def data_check(tables_info, openai_api_key: str = None):
     """Data compliance check for all tables"""
     reports_list = []
-    all_allowed = True  # 用于判断整体结论
+    all_allowed = True  # Used to determine overall conclusion
     for table in tables_info:
         try:
             report = audit_table_with_gpt(table, openai_api_key)
             report_json = json.loads(report)
             reports_list.append(report_json)
-            # 判断是否允许使用
+            # Check if allowed to use
             if not report_json.get("allowed_to_use", False):
                 all_allowed = False
         except Exception as e:
-            print(f"审查 {table} 失败：{e}")
+            print(f"Audit failed for table {table}: {e}")
             report_json = {"table_name": table.get("table_name", "unknown"), "allowed_to_use": False, "error": str(e)}
             reports_list.append(report_json)
             all_allowed = False
     
-    # 统一总结报告
+    # Unified summary report
     summary = {
         "tables_audited": reports_list,
         "final_conclusion": all_allowed
     }
-    print("总结报告：")
+    print("Summary report:")
     print(json.dumps(summary, indent=4, ensure_ascii=False))
-    # 返回 True / False 信号
+    # Return True / False signal
     return all_allowed, summary
 
 async def initialize_agent(
@@ -589,34 +589,34 @@ async def get_result(filename: str):
 @app.post("/review", response_model=DataReviewResponse)
 async def review_data_compliance(request: DataReviewRequest):
     """
-    数据合规性检查接口
-    专门用于检查数据是否符合合规要求，不执行其他分析
+    Data compliance review endpoint
+    Specifically for checking data compliance requirements, does not perform other analysis
     """
     start_time = time.time()
     
     try:
-        # 设置 OpenAI API 密钥
+        # Set OpenAI API key
         api_key_to_use = request.openai_api_key or os.getenv("OPENAI_API_KEY")
         
-        # 如果请求中的密钥无效，使用环境变量或备用密钥
+        # If request key is invalid, use environment variable or fallback key
         if not api_key_to_use or ('*' in api_key_to_use and len(api_key_to_use) < 50):
             env_key = os.getenv("OPENAI_API_KEY")
             if env_key and ('*' not in env_key and len(env_key) >= 50):
                 api_key_to_use = env_key
             else:
-                # 使用备用密钥
+                # Use fallback key
                 api_key_to_use = "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"
         
         os.environ["OPENAI_API_KEY"] = api_key_to_use
         
-        # 获取表信息
+        # Get table information
         if request.tables_info:
-            # 如果提供了表信息，直接使用
+            # If table information is provided, use it directly
             tables_info = request.tables_info
-            print(f"使用提供的表信息，共 {len(tables_info)} 个表")
+            print(f"Using provided table information, {len(tables_info)} tables total")
         else:
-            # 如果没有提供表信息，先获取schema
-            print("未提供表信息，正在获取数据库结构...")
+            # If no table information provided, get schema first
+            print("No table information provided, retrieving database structure...")
             agent = await initialize_agent(
                 supabase_project_id=request.supabase_project_id,
                 supabase_access_token=request.supabase_access_token,
@@ -629,20 +629,20 @@ async def review_data_compliance(request: DataReviewRequest):
             if not tables_info:
                 raise HTTPException(
                     status_code=400,
-                    detail="无法获取数据库表信息，请检查 Supabase 连接配置"
+                    detail="Unable to retrieve database table information, please check Supabase connection configuration"
                 )
-            print(f"成功获取数据库结构，共 {len(tables_info)} 个表")
+            print(f"Successfully retrieved database structure, {len(tables_info)} tables total")
         
-        print(f"开始审查 {len(tables_info)} 个表的数据合规性...")
+        print(f"Starting data compliance review for {len(tables_info)} tables...")
         
-        # 执行数据合规检查
+        # Execute data compliance check
         all_allowed, summary = data_check(tables_info, api_key_to_use)
         
         execution_time = time.time() - start_time
         
         return DataReviewResponse(
             success=True,
-            message=f"数据合规性检查完成，共审查 {len(tables_info)} 个表",
+            message=f"Data compliance check completed, {len(tables_info)} tables reviewed",
             review_result=summary,
             tables_audited=summary.get("tables_audited", []),
             final_conclusion=all_allowed,
@@ -656,7 +656,7 @@ async def review_data_compliance(request: DataReviewRequest):
         execution_time = time.time() - start_time
         raise HTTPException(
             status_code=500,
-            detail=f"数据合规性检查失败: {str(e)}"
+            detail=f"Data compliance check failed: {str(e)}"
         )
 
 if __name__ == "__main__":
