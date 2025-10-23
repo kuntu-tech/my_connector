@@ -4,6 +4,7 @@
 BI Analysis API - FastAPI wrapper for BI_result(1).py
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal, Dict, List, Any, Optional
 import asyncio
@@ -26,6 +27,15 @@ app = FastAPI(
     title="BI Analysis API",
     version="1.0.0",
     description="A FastAPI service for AI-powered business intelligence analysis using OpenAI Agents and Supabase MCP tools."
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源，生产环境建议指定具体域名
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许所有HTTP方法
+    allow_headers=["*"],  # 允许所有请求头
 )
 
 # Load environment variables

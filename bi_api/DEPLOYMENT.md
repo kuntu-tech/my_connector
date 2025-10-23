@@ -191,3 +191,4 @@ print(f"文件内容: {file_content['content'][:200]}...")
 2. API 文档 (访问 `/docs` 端点)
 3. 测试脚本和演示脚本
 4. Render 部署日志
+
