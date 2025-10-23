@@ -12,6 +12,7 @@ import time
 import os
 import json
 import sys
+import copy
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -110,6 +111,39 @@ class DataReviewResponse(BaseModel):
     review_result: Dict[str, Any] = {}
     tables_audited: List[Dict[str, Any]] = []
     final_conclusion: bool
+    execution_time: float
+    timestamp: str
+
+class IntegratedAnalysisRequest(BaseModel):
+    """Integrated Analysis request model (demo-4.py functionality)"""
+    supabase_project_id: str = Field(
+        ..., 
+        description="Supabase project ID"
+    )
+    supabase_access_token: str = Field(
+        ..., 
+        description="Supabase access token"
+    )
+    user_name: str = Field(
+        default="huimin", 
+        description="User identifier for session management"
+    )
+    openai_api_key: Optional[str] = Field(
+        default=None,
+        description="OpenAI API key (optional, can use env variable)"
+    )
+    analysis_type: Literal["market_only", "full_integrated"] = Field(
+        default="full_integrated",
+        description="Type of analysis: market_only or full_integrated"
+    )
+
+class IntegratedAnalysisResponse(BaseModel):
+    """Integrated Analysis response model"""
+    success: bool
+    message: str
+    analysis_type: str
+    results: Dict[str, Any] = {}
+    files_generated: List[str] = []
     execution_time: float
     timestamp: str
 
@@ -401,6 +435,288 @@ async def save_to_database(analysis_type: str, content: str):
     except Exception as e:
         print(f"Error saving data: {e}")
 
+# Integrated Analysis Functions (from demo-4.py)
+def parse_customer_analysis_to_dataframe(customer_data):
+    """
+    将customer_analysis数据解析为DataFrame，每个question为一行
+    支持多种JSON格式：segments, target_customers, 或直接的问题列表
+    """
+    customers_data = []
+
+    # 处理不同的JSON结构
+    if 'segments' in customer_data:
+        # 新格式：segments
+        segments = customer_data['segments']
+    elif 'target_customers' in customer_data:
+        # 旧格式：target_customers
+        segments = customer_data['target_customers']
+    elif isinstance(customer_data, list):
+        # 直接是segment列表
+        segments = customer_data
+    else:
+        # 如果都没有，返回空列表
+        print(f"Warning: Unknown customer data format: {list(customer_data.keys())}")
+        return []
+
+    for segment in segments:
+        # 基本信息 - 兼容不同的字段名
+        segment_name = segment.get('segment_name', segment.get('customer_name', 'Unknown'))
+        profile = segment.get('profile', {})
+        
+        base_info = {
+            'customer_name': segment_name,
+            'industry': profile.get('industry', 'Unknown'),
+            'company_size': profile.get('company_size', 'Unknown'),
+            'region': ', '.join(profile.get('region', [])) if isinstance(profile.get('region'), list) else profile.get('region', 'Unknown'),
+            'roles': ', '.join(profile.get('roles', [])) if isinstance(profile.get('roles'), list) else profile.get('roles', 'Unknown'),
+            'willingness_to_pay_tier': segment.get('willingness_to_pay', {}).get('tier', 'Unknown'),
+            'budget_range_usd': segment.get('willingness_to_pay', {}).get('budget_range_usd', 'Unknown')
+        }
+
+        # 为每个问题创建一行
+        valued_questions = segment.get('valued_questions', [])
+        for question in valued_questions:
+            question_info = base_info.copy()
+            question_info.update({
+                'question': question.get('question', ''),
+                'pain_point': question.get('mapped_pain_point', ''),
+                'problem_type': question.get('problem_type', ''),
+                'monetization_path': ', '.join(question.get('monetization_path', [])) if isinstance(question.get('monetization_path'), list) else question.get('monetization_path', ''),
+                'decision_value': question.get('decision_value', '')
+            })
+            customers_data.append(question_info)
+
+    return customers_data
+
+async def run_integrated_analysis(request: IntegratedAnalysisRequest) -> Dict[str, Any]:
+    """
+    Run integrated analysis (demo-4.py functionality)
+    """
+    try:
+        # Set OpenAI API key with fallback mechanism
+        api_key_to_use = request.openai_api_key
+        
+        # Priority: Use request API key first, then environment variable
+        if api_key_to_use and ('*' not in api_key_to_use and len(api_key_to_use) >= 50):
+            print(f"Using request API key: {api_key_to_use[:20]}...")
+            os.environ["OPENAI_API_KEY"] = api_key_to_use
+        elif os.getenv("OPENAI_API_KEY") and ('*' not in os.getenv("OPENAI_API_KEY") and len(os.getenv("OPENAI_API_KEY")) >= 50):
+            print(f"Using environment API key: {os.getenv('OPENAI_API_KEY')[:20]}...")
+            api_key_to_use = os.getenv("OPENAI_API_KEY")
+        else:
+            # Use fallback API key only if both are invalid
+            fallback_key = "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"
+            print(f"Both request and environment keys are invalid, using fallback: {fallback_key[:20]}...")
+            os.environ["OPENAI_API_KEY"] = fallback_key
+            api_key_to_use = fallback_key
+
+        # Initialize agent
+        agent = await initialize_agent(
+            supabase_project_id=request.supabase_project_id,
+            supabase_access_token=request.supabase_access_token,
+            user_name=request.user_name
+        )
+        
+        # Read prompt files from demo2 directory
+        BUSINESS_EXPERT_PROMPT = (Path(__file__).resolve().parent.parent / "demo2" / "system_prompt.md").read_text(encoding="utf-8")
+        MARKET_ANALYSIS_PROMPT = (Path(__file__).resolve().parent.parent / "demo2" / "market_analysis_prompt.md").read_text(encoding="utf-8")
+        CUSTOMER_ANALYSIS_PROMPT = (Path(__file__).resolve().parent.parent / "demo2" / "audience_analysis_prompt.md").read_text(encoding="utf-8")
+        
+        session = SQLiteSession(request.user_name, f"{request.user_name}_conversations.db")
+        
+        output_dir = Path(__file__).resolve().parent / "outputs-4"
+        output_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        results = {}
+        files_generated = []
+        
+        # ========== Step 1: Market Analysis ==========
+        print("=" * 60)
+        print("STEP 1: Market Analysis")
+        print("=" * 60)
+        
+        market_analysis = await Runner.run(
+            agent,
+            input=MARKET_ANALYSIS_PROMPT,
+            session=session
+        )
+        market_analysis_output = market_analysis.final_output
+        
+        market_path = output_dir / f"market_analysis_{timestamp}.md"
+        market_path.write_text(market_analysis_output, encoding="utf-8")
+        files_generated.append(str(market_path))
+        print(f"✓ Market analysis saved to: {market_path.name}")
+        
+        # 解析市场分析 JSON
+        market_analysis_json = json.loads(market_analysis_output)
+        
+        # 检查JSON结构并提取市场信息
+        if 'market_segments' in market_analysis_json:
+            market_segments = market_analysis_json['market_segments']
+        elif 'summary' in market_analysis_json:
+            # 如果没有market_segments，创建一个基于summary的市场段
+            market_segments = [{
+                'market_name': market_analysis_json['summary'].get('headline', 'Unknown Market'),
+                'description': market_analysis_json['summary'].get('core_insight', ''),
+                'strategy': market_analysis_json['summary'].get('strategic_call', '')
+            }]
+        else:
+            # 如果都没有，创建一个默认的市场段
+            market_segments = [{
+                'market_name': 'Primary Market',
+                'description': 'Market analysis completed',
+                'strategy': 'Continue with customer analysis'
+            }]
+        
+        results["market_analysis"] = market_analysis_json
+        results["market_segments"] = market_segments
+        
+        if request.analysis_type == "market_only":
+            return {
+                "results": results,
+                "files_generated": files_generated,
+                "timestamp": timestamp
+            }
+        
+        # ========== Step 2: Customer Analysis for Each Market ==========
+        print("=" * 60)
+        print("STEP 2: Customer Analysis (循环处理每个市场)")
+        print("=" * 60)
+        
+        # 创建一个深拷贝用于合并受众分析（保持原始市场分析不变）
+        integrated_analysis = copy.deepcopy(market_analysis_json)
+        
+        print(f"\n📊 Found {len(market_segments)} market(s) to analyze:")
+        
+        all_validation_reports = []
+        
+        for idx, market in enumerate(market_segments, 1):
+            market_name = market.get("market_name", f"market_{idx}")
+            print(f"\n[{idx}/{len(market_segments)}] Processing Market: {market_name}")
+
+            # 执行受众分析 - 利用 session 上下文，无需传递完整市场数据
+            customer_prompt = f"""
+Based on our previous market analysis conversation, please focus on the market: **{market_name}**
+
+{CUSTOMER_ANALYSIS_PROMPT}
+
+"""
+            try:
+                customer_analysis = await Runner.run(
+                    agent,
+                    input=customer_prompt,
+                    session=session
+                )
+                customer_analysis_output = customer_analysis.final_output
+                
+                # 保存单个市场的受众分析
+                safe_market_name = market_name.replace(" ", "_").replace("/", "_")
+                customer_path = output_dir / f"customer_analysis_{safe_market_name}_{timestamp}.md"
+                customer_path.write_text(customer_analysis_output, encoding="utf-8")
+                files_generated.append(str(customer_path))
+                print(f"   ✓ Customer analysis saved: {customer_path.name}")
+                
+                # 将受众分析合并到 integrated_analysis 中（不修改原始 market_analysis_json）
+                customer_json = json.loads(customer_analysis_output)
+                target_market_entry = None
+                for entry in integrated_analysis.get("market_segments", []):
+                    if entry.get("market_name") == market_name:
+                        target_market_entry = entry
+                        break
+
+                if target_market_entry is None:
+                    target_market_entry = {"market_name": market_name}
+                    integrated_analysis.setdefault("market_segments", []).append(target_market_entry)
+
+                target_market_entry["customer_analysis"] = customer_json
+                print("   ✓ Customer analysis merged into integrated analysis")
+                
+                # 数据建模验证
+                print(f"   → Running data modeling validation...")
+                question_data = parse_customer_analysis_to_dataframe(customer_json)
+                print("=== question_check  ===")
+                reports_list = []
+                
+                # Import question check function
+                sys.path.append(str(Path(__file__).resolve().parent.parent))
+                from question_check_test import checkquestion_with_gpt
+                
+                for question in question_data:
+                    report = checkquestion_with_gpt(question, "schema_analysis_output")
+                    reports_list.append(report)
+                
+                # 将验证报告也合并到 integrated_analysis 中
+                if market_name not in integrated_analysis:
+                    integrated_analysis[market_name] = {}
+                integrated_analysis[market_name]["validation_reports"] = reports_list
+                all_validation_reports.extend(reports_list)
+                print(f"   ✓ Validation complete: {len(reports_list)} questions validated\n")
+
+            except Exception as e:
+                print(f"   ✗ Error processing market {market_name}: {e}\n")
+                # 确保使用正确的键名
+                if market_name not in integrated_analysis:
+                    integrated_analysis[market_name] = {}
+                integrated_analysis[market_name]["customer_analysis"] = {
+                    "error": str(e),
+                    "status": "failed"
+                }
+
+        # ========== Step 3: 保存完整的分析结果 ==========
+        print("=" * 60)
+        print("STEP 3: Saving Complete Analysis Results")
+        print("=" * 60)
+        
+        # 保存纯市场分析（不含受众分析）
+        pure_market_analysis = {
+            "metadata": {
+                "analysis_type": "market_analysis_only",
+                "analysis_timestamp": timestamp,
+                "analysis_date": datetime.now().isoformat(),
+            },
+            "markets": market_analysis_json
+        }
+        
+        pure_market_path = output_dir / f"market_analysis_pure_{timestamp}.json"
+        pure_market_path.write_text(
+            json.dumps(pure_market_analysis, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        files_generated.append(str(pure_market_path))
+        print(f"✓ Pure market analysis saved: {pure_market_path.name}")
+        
+        # 保存集成分析（市场分析 + 受众分析）
+        integrated_analysis_output = {
+            "metadata": {
+                "analysis_type": "integrated_market_and_customer",
+                "analysis_timestamp": timestamp,
+                "analysis_date": datetime.now().isoformat(),
+            },
+            "markets": integrated_analysis
+        }
+        
+        integrated_path = output_dir / f"integrated_analysis_{timestamp}.json"
+        integrated_path.write_text(
+            json.dumps(integrated_analysis_output, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        files_generated.append(str(integrated_path))
+        print(f"✓ Integrated analysis saved: {integrated_path.name}")
+        
+        results["integrated_analysis"] = integrated_analysis_output
+        results["validation_reports"] = all_validation_reports
+        
+        return {
+            "results": results,
+            "files_generated": files_generated,
+            "timestamp": timestamp
+        }
+        
+    except Exception as e:
+        print(f"Error in integrated analysis: {e}")
+        raise e
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -657,6 +973,43 @@ async def review_data_compliance(request: DataReviewRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Data compliance check failed: {str(e)}"
+        )
+
+# Integrated Analysis endpoint (demo-4.py functionality)
+@app.post("/integrated-analysis", response_model=IntegratedAnalysisResponse)
+async def integrated_analysis(request: IntegratedAnalysisRequest):
+    """
+    Integrated Analysis endpoint that encapsulates demo-4.py functionality
+    Performs market analysis + customer analysis + question validation
+    """
+    start_time = time.time()
+    
+    try:
+        print(f"Starting integrated analysis for user: {request.user_name}")
+        print(f"Analysis type: {request.analysis_type}")
+        
+        # Run the integrated analysis
+        result = await run_integrated_analysis(request)
+        
+        execution_time = time.time() - start_time
+        
+        return IntegratedAnalysisResponse(
+            success=True,
+            message=f"Integrated analysis completed successfully",
+            analysis_type=request.analysis_type,
+            results=result["results"],
+            files_generated=result["files_generated"],
+            execution_time=execution_time,
+            timestamp=result["timestamp"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        execution_time = time.time() - start_time
+        raise HTTPException(
+            status_code=500,
+            detail=f"Integrated analysis failed: {str(e)}"
         )
 
 if __name__ == "__main__":
